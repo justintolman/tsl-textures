@@ -115,7 +115,7 @@ let veigns = TSLFn( ( params ) => {
 }, defaults );
 
 let marble = (params) =>{
-	let mot = ( typeof params.mottled === 'undefined' ) ? defaults.mottled : params.mottled;
+	let mot = ( typeof params?.mottled === 'undefined' ) ? defaults.mottled : params.mottled;
 	if ( !mot ) return veigns( params );
 	return mix( mottle( params ), veigns( params ), 0.5 );
 }
