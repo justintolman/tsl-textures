@@ -1,20 +1,23 @@
-﻿
 //	TSL-Textures: Marble
 
-
-
 import { Color } from "three";
-import { add, div, exp, If, mix, mul, oneMinus, positionGeometry, pow } from 'three/tsl';
+import { add, div, exp, Fn, Loop, mix, If, mul, oneMinus, positionGeometry, pow } from 'three/tsl';
 import { noise, prepare, TSLFn } from './tsl-utils.js';
 
-
-
-var defaults = {
+let defaults = {
 	$name: 'Marble',
+	//mottling
+	mottled: true,
+	scale: 2.0,
+	iterations: 8,
+	amount: -0.3,
+	opacity: 0.5,
+	noise: 0.5,
+	noiseScale: 0.5,
 
-	scale: 1.2,
-	thinness: 5,
-	noise: 0.3,
+	//veining
+	v_scale: 1.2,
+	v_thinness: 5,
 
 	color: new Color( 0x4545D3 ),
 	background: new Color( 0xF0F8FF ),
@@ -22,24 +25,69 @@ var defaults = {
 	seed: 0,
 };
 
+let _mottle = Fn( ( params )=>{
 
+	let pos = positionGeometry.mul( exp( params.scale.div( 4 ).add( -1 ) ) ).add( params.seed ).toVar( );
 
-var marble = TSLFn( ( params ) => {
+	let amount = params.amount.mul( noise( pos.mul( params.amount.div( 2 ).add( 4 ) ) ).add( 4 ) ).toVar();
+
+	let k = noise( pos ).toVar();
+
+	Loop( params.iterations, ()=>{
+
+		pos.mulAssign( 2 );
+		k.addAssign( noise( pos ) );
+
+	} );
+
+	k.subAssign( noise( pos.mul( 2 ) ).abs() );
+
+	k.assign( k.sub( amount ).clamp( 0, 15 ) );
+
+	return k;
+
+} );
+
+let mottle = TSLFn( ( params )=>{
 
 	params = prepare( params, defaults );
 
-	var pos = positionGeometry.mul( exp( params.scale ) ).add( params.seed ).toVar( );
+	let k = _mottle( params ).mul( 1.25 ).pow( 0.5 );
 
-	var k = add(
+	let pos = positionGeometry.mul( exp( params.scale.add( params.noiseScale.mul( 3 ), 2 ) ) );
+
+	k.addAssign( params.noise.mul( noise( pos ).abs().add( 0.1 ).pow( 2 ) ) );
+
+	return mix( params.color, params.background, k );
+
+}, defaults );
+
+mottle.opacity = TSLFn( ( params )=>{
+
+	params = prepare( params, defaults );
+
+	let k = _mottle( params ).mul( params.opacity.add( 0.2 ) );
+
+	return k.oneMinus();
+
+}, defaults );
+
+let veigns = TSLFn( ( params ) => {
+
+	params = prepare( params, defaults );
+
+	let pos = positionGeometry.mul( exp( params.v_scale ) ).add( params.seed ).toVar( );
+
+	let k = add(
 		noise( pos ),
 		noise( pos.mul( 2 ) ).mul( 0.5 ),
 		noise( pos.mul( 6 ) ).mul( 0.1 )
 	);
 
-	var k = oneMinus( k.abs().pow( 2.5 ) ).toVar();
+	k = oneMinus( k.abs().pow( 2.5 ) ).toVar();
 
-	var	maxSmooth = oneMinus( pow( 0.5, params.thinness.add( 7 ) ) ).toVar(),
-		minSmooth = oneMinus( pow( 0.5, params.thinness.add( 7 ).mul( 0.5 ) ) ).toVar();
+	let	maxSmooth = oneMinus( pow( 0.5, params.v_thinness.add( 7 ) ) ).toVar(),
+		minSmooth = oneMinus( pow( 0.5, params.v_thinness.add( 7 ).mul( 0.5 ) ) ).toVar();
 
 	If( k.greaterThan( maxSmooth ), ()=>{
 
@@ -53,8 +101,8 @@ var marble = TSLFn( ( params ) => {
 		} )
 		.Else( ()=> {
 
-			var a = k.sub( minSmooth );
-			var b = maxSmooth.sub( minSmooth );
+			let a = k.sub( minSmooth );
+			let b = maxSmooth.sub( minSmooth );
 			k.assign( pow( div( a, b ), 5 ).mul( 0.75 ) );
 			k.assign( k.mul( add( 0.5, noise( pos.mul( 2 ) ).mul( 1.5 ) ) ) );
 
@@ -66,6 +114,10 @@ var marble = TSLFn( ( params ) => {
 
 }, defaults );
 
-
+let marble = (params) =>{
+	let mot = ( typeof params.mottled === 'undefined' ) ? defaults.mottled : params.mottled;
+	if ( !mot ) return veigns( params );
+	return mix( mottle( params ), veigns( params ), 0.5 );
+}
 
 export { marble };
